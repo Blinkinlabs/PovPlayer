@@ -1,0 +1,37 @@
+# General temp files
+*.DS_Store
+*.swp
+*.lck
+*.autosave
+
+# GNU/Make
+*/*.hex
+/*.elf
+*/*.o
+*/*.d
+*/*.i
+*/*.ii
+*/*.s
+*/*.dfu
+
+# C51 files
+*.INC
+*.OBJ
+*.SRC
+*.LST
+*.MAP
+*.hex
+*/ch554_txm
+firmware/usb-host/backlightbasic
+
+# Eagle PCB
+*.[bls]#[0-9]
+*.?##
+
+# Altium
+*/History
+*/__Previews
+*/Project\ Logs\ for\ *
+*/Project\ Outputs\ for\ *
+*/debug.log
+*/*.PrjPcbStructure
