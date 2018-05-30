@@ -4,12 +4,10 @@
 #ifndef MBI6020_H_
 #define MBI6020_H_
 
-typedef struct LED_Data {
-  uint16_t r;
-  uint16_t g;
-  uint16_t b;
-} LED_Data;
+#include "LED_DATA.h"
 
+
+extern void mbi6020_begin();
 
 extern void send16bitConfigurationData(size_t count);
 extern void send8bitDotCorrectionDataHigh(size_t count);

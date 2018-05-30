@@ -4,15 +4,15 @@
 #include <SPI.h>
 #include "MBI6020.h"
 
+#define SPI_CLOCK_FREQ 10000000
+
+
 #define HEADER_16B_GRAYSCALE_DATA (0x3F)
 #define HEADER_10B_GRAYSCALE_DATA (0x2B)
 #define HEADER_8B_DOT_CORRECTION_DATA (0x33)
 #define HEADER_6B_DOT_CORRECTION_DATA (0x27)
 #define HEADER_16B_CONFIGURATION_DATA (0x23)
 #define HEADER_10B_CONFIGURATION_DATA (0x37)
-
-
-const int SPI_CLOCK_FREQ = 10000000;
 
 bool computeParity(size_t data) {
   bool parity = false;
@@ -22,6 +22,31 @@ bool computeParity(size_t data) {
       parity = !parity;
 
   return parity;
+}
+
+void mbi6020_begin() {
+  SPI1.begin();
+
+  // TODO: Send these in a better way
+  const int LED_COUNT = 40;
+  LED_Data ledData[LED_COUNT];
+  
+  // This routine copied from ARC3730 controller
+  for(int i = 0; i < 15; i++) {
+    // Send 16-bit grayscale data [111111], all zeros, except the last two LEDs have some red
+    send16bitGrayscaleData(ledData, LED_COUNT);
+    delayMicroseconds(250);
+    // Send config48 data [100011], for all channels
+    send16bitConfigurationData(LED_COUNT);
+    delay(12);
+    
+    // Send 16-bit grayscale data [111111], all zeros, except the last three LEDs have some red
+    send16bitGrayscaleData(ledData, LED_COUNT);
+    delayMicroseconds(250);
+    // Send 8-bit dot correction data [110011], all ones
+    send8bitDotCorrectionDataHigh(LED_COUNT);
+    delay(12);
+  }
 }
 
 void send16bitConfigurationData(size_t count) {
@@ -53,25 +78,25 @@ void send16bitConfigurationData(size_t count) {
   configData[1] = (CF1 & 0x3FF);
   configData[2] = (CF2 & 0x07);
 
-  SPI.beginTransaction(SPISettings(SPI_CLOCK_FREQ, MSBFIRST, SPI_MODE1));
+  SPI1.beginTransaction(SPISettings(SPI_CLOCK_FREQ, MSBFIRST, SPI_MODE1));
 
   // send the preamble
   for(uint8_t i = 0; i < 3; i++) {
-    SPI.transfer((preamble[i] >> 8 ) & 0xFF);
-    SPI.transfer((preamble[i]      ) & 0xFF);
+    SPI1.transfer((preamble[i] >> 8 ) & 0xFF);
+    SPI1.transfer((preamble[i]      ) & 0xFF);
   }
 
   // send the config
-  for(uint8_t i = 0; i < count; i++) {
-    SPI.transfer((configData[0] >> 8 ) & 0xFF);
-    SPI.transfer((configData[0]      ) & 0xFF);
-    SPI.transfer((configData[1] >> 8 ) & 0xFF);
-    SPI.transfer((configData[1]      ) & 0xFF);
-    SPI.transfer((configData[2] >> 8 ) & 0xFF);
-    SPI.transfer((configData[2]      ) & 0xFF);
+  for(size_t i = 0; i < count; i++) {
+    SPI1.transfer((configData[0] >> 8 ) & 0xFF);
+    SPI1.transfer((configData[0]      ) & 0xFF);
+    SPI1.transfer((configData[1] >> 8 ) & 0xFF);
+    SPI1.transfer((configData[1]      ) & 0xFF);
+    SPI1.transfer((configData[2] >> 8 ) & 0xFF);
+    SPI1.transfer((configData[2]      ) & 0xFF);
   }
 
-  SPI.endTransaction();
+  SPI1.endTransaction();
 }
 
 // Send correction data, except that we don't care about sending correction data
@@ -94,25 +119,25 @@ void send8bitDotCorrectionDataHigh(size_t count) {
   preamble[1] = (HEADER_8B_DOT_CORRECTION_DATA << 10) | (countAdj & 0x3FF);
   preamble[2] = ((parity & 0x0F) << 12) | (countAdj & 0x3FF);
 
-  SPI.beginTransaction(SPISettings(SPI_CLOCK_FREQ, MSBFIRST, SPI_MODE1));
+  SPI1.beginTransaction(SPISettings(SPI_CLOCK_FREQ, MSBFIRST, SPI_MODE1));
 
   // send the preamble
   for(uint8_t i = 0; i < 3; i++) {
-    SPI.transfer((preamble[i] >> 8 ) & 0xFF);
-    SPI.transfer((preamble[i]      ) & 0xFF);
+    SPI1.transfer((preamble[i] >> 8 ) & 0xFF);
+    SPI1.transfer((preamble[i]      ) & 0xFF);
   }
 
   // send the LED data
-  for(uint8_t i = 0; i < count; i++) {
-    SPI.transfer(0xFF);
-    SPI.transfer(0xFF);
-    SPI.transfer(0xFF);
-    SPI.transfer(0xFF);
-    SPI.transfer(0xFF);
-    SPI.transfer(0xFF);
+  for(size_t i = 0; i < count; i++) {
+    SPI1.transfer(0xFF);
+    SPI1.transfer(0xFF);
+    SPI1.transfer(0xFF);
+    SPI1.transfer(0xFF);
+    SPI1.transfer(0xFF);
+    SPI1.transfer(0xFF);
   }
 
-  SPI.endTransaction();
+  SPI1.endTransaction();
 }
 
 void send16bitGrayscaleData(const LED_Data * data, size_t count) {
@@ -134,24 +159,24 @@ void send16bitGrayscaleData(const LED_Data * data, size_t count) {
   preamble[1] = (HEADER_16B_GRAYSCALE_DATA << 10) | (countAdj & 0x3FF);
   preamble[2] = ((parity & 0x0F) << 12) | (countAdj & 0x3FF);
 
-  SPI.beginTransaction(SPISettings(SPI_CLOCK_FREQ, MSBFIRST, SPI_MODE1));
+  SPI1.beginTransaction(SPISettings(SPI_CLOCK_FREQ, MSBFIRST, SPI_MODE1));
 
   // send the preamble
   for(uint8_t i = 0; i < 3; i++) {
-    SPI.transfer((preamble[i] >> 8 ) & 0xFF);
-    SPI.transfer((preamble[i]      ) & 0xFF);
+    SPI1.transfer((preamble[i] >> 8 ) & 0xFF);
+    SPI1.transfer((preamble[i]      ) & 0xFF);
   }
 
   // send the LED data
-  for(uint8_t i = 0; i < count; i++) {
-    SPI.transfer((data[i].r >> 8 ) & 0xFF);
-    SPI.transfer((data[i].r      ) & 0xFF);
-    SPI.transfer((data[i].g >> 8 ) & 0xFF);
-    SPI.transfer((data[i].g      ) & 0xFF);
-    SPI.transfer((data[i].b >> 8 ) & 0xFF);
-    SPI.transfer((data[i].b      ) & 0xFF);
+  for(size_t i = 0; i < count; i++) {
+    SPI1.transfer(data[i].r);
+    SPI1.transfer(0x00);
+    SPI1.transfer(data[i].g);
+    SPI1.transfer(0x00);
+    SPI1.transfer(data[i].b);
+    SPI1.transfer(0x00);
   }
 
-  SPI.endTransaction();
+  SPI1.endTransaction();
 
 }
