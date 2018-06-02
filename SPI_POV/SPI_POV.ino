@@ -7,26 +7,34 @@
 #include "LED_DATA.h"
 
 //*************************************************
-// Configuration:
+// POV Player
+//
+// Designed for use with a Teensy 3.6
+//
+// Default configuration:
 
 const int MAX_LED_COUNT = 500;
 int ledCount = 240;
 int fps = 800;
 const char fileName[] = "POV.BMP";
 
-// Designed for use with a Teensy 3.6
-//
-// Wiring:
-// -Connect Teensy 3.6 pin 11 to the 'INSDI' input on the converter PCB
-// -Connect Teensy 3.6 pin 13 to the 'INCLK' input on the converter PCB
-// -Connect Teensy 3.6 gnd pin to the 'GND' input on the converter PCB
+//*************************************************
+// Pin connections
 
-// LCD pins
-#define TFT_RESET 4
-#define TFT_DC 5
-#define TFT_CS 10
+// LED output pins (hardware SPI 1)
+#define LED_MOSI 0
+#define LED_SCK 32
 
-#define TOUCH_CS  9
+// LCD and TS pins (hardware SPI 0)
+#define TFT_MOSI 11
+#define TFT_MISO 12
+#define TFT_SCK 13
+
+#define TFT_RESET 2
+#define TFT_DC 3
+#define TFT_CS 9
+
+#define TOUCH_CS  10
 #define TOUCH_IRQ 24
 //*************************************************
 
@@ -48,11 +56,11 @@ unsigned int imageHeight = 0;
 
 unsigned int frameDelay;
 
-// Use hardware SPI (on Uno, #13, #12, #11) and the above for CS/DC
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RESET);
+//Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC,TFT_MOSI, TFT_SCK, TFT_RESET, TFT_MISO);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
 
-XPT2046_Touchscreen ts(TOUCH_CS);
-//XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
+//XPT2046_Touchscreen ts(TOUCH_CS);
+XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
 
 // LED pixel buffer
 LED_Data ledData[MAX_LED_COUNT];
@@ -149,6 +157,26 @@ void drawStats() {
   tft.println(imageWidth);
   tft.print("Height:");
   tft.println(imageHeight);
+
+
+  // Also write it to serial, for debugging
+  Serial.println("");
+  Serial.print("LEDs:");
+  Serial.println(ledCount);
+  Serial.print("Protocol:");
+  if(protocol == PROTOCOL_MBI6020)
+    Serial.println("MBI6020");
+  else if(protocol == PROTOCOL_APA102)
+    Serial.println("APA102");
+  Serial.print("Speed:");
+  Serial.print((int)fps);
+  Serial.println("fps");
+  Serial.print("Image:");
+  Serial.println(fileName);
+  Serial.print("Width:");
+  Serial.println(imageWidth);
+  Serial.print("Height:");
+  Serial.println(imageHeight);
 }
 
 void drawScreen() {
@@ -187,38 +215,47 @@ void drawScreen() {
 void setup() {
   // Initialize USB serial (for debug messages)
   Serial.begin(9600);
+//  delay(3000);
+  
+  Serial.println("Blinkinlabs POV Player");
+  Serial.println("Version 0.1");
 
+  Serial.println("Starting TFT");
+  tft.begin();
+  // It seems that the display doesn't fully turn on if not reset twice- not sure why.
+  delay(100);
   tft.begin();
   
+  Serial.println("Starting TS");
   ts.begin();
-  
+
+  Serial.println("Starting LED output");
   if(protocol == PROTOCOL_MBI6020)
     mbi6020_begin();
   else if(protocol == PROTOCOL_APA102)
     apa102_begin();
-  
+
+  Serial.println("Starting SD");
   if (!SD.begin(BUILTIN_SDCARD)) {
     Serial.println("failed to initialize SD card!");
   }
 
+  Serial.println("Loading Image");
   unsigned int retval;
   retval = loadbmp_decode_file(fileName, &imageData, &imageWidth, &imageHeight, LOADBMP_RGB);
 
-  Serial.print("Return value:");
-  Serial.println(retval);
-  Serial.print("  width:");
-  Serial.println(imageWidth);
-  Serial.print("  height:");
-  Serial.println(imageHeight);
-
   if(retval == LOADBMP_NO_ERROR) {
+    Serial.println("Image loaded");
+    
     mode = MODE_IMAGE;
 
     // Set the led count based on the image height
     ledCount = min(MAX_LED_COUNT, imageHeight);
   }
-  else
+  else {
+    Serial.println("Error loading image, switching to test pattern");
     mode = MODE_TESTPATTERN;
+  }
 
   frameDelay = 1000000/fps;
 
@@ -235,6 +272,10 @@ void loop() {
     // Determined experimentally
     const int mappedX = map(p.y,3800,300,0,240);
     const int mappedY = map(p.x,3900,370,0,320);
+
+    Serial.print(p.x);
+    Serial.print(",");
+    Serial.println(p.y);
 
     if(touchesButton(10,120,mappedX,mappedY)) {
       // Speed +
