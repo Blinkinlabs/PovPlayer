@@ -148,7 +148,8 @@ LOADBMP_API unsigned int loadbmp_decode_file(
     {
       for (x = 0; x < w; x++)
       {
-        i = (x + y * w) * components;
+        //i = (x + y * w) * components;
+        i = (x * h + y) * components;
 
         if (f.read(data + i, 3) == 0)
         {

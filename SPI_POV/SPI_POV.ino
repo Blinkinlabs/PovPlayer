@@ -13,9 +13,10 @@
 //
 // Default configuration:
 
-const int MAX_LED_COUNT = 500;
-int ledCount = 240;
-int fps = 800;
+const unsigned int MAX_LED_COUNT = 500;
+unsigned int ledCount = 240;
+int fps = 1100;
+int spiClockFrequency = 16000000;
 const char fileName[] = "POV.BMP";
 
 //*************************************************
@@ -36,6 +37,9 @@ const char fileName[] = "POV.BMP";
 
 #define TOUCH_CS  10
 #define TOUCH_IRQ 24
+
+// Debug pin
+#define FRAME_TIMING 1
 //*************************************************
 
 #define LOADBMP_IMPLEMENTATION
@@ -49,6 +53,19 @@ int mode;
 #define PROTOCOL_APA102 1
 int protocol = PROTOCOL_APA102;
 
+struct Button {
+  String text;
+  int x;
+  int y;
+};
+
+Button speedPlus  = {"Speed +", 10, 100};
+Button speedMinus = {"Speed -", 10, 135};
+Button apa102     = {"APA102",  10, 170};
+Button mbi6020    = {"MBI6020", 10, 205};
+Button clockPlus  = {"Clock +", 10, 240};
+Button clockMinus = {"Clock -", 10, 275};
+
 // Decoded bitmap geometry
 unsigned char *imageData;
 unsigned int imageWidth = 0;
@@ -57,7 +74,7 @@ unsigned int imageHeight = 0;
 unsigned int frameDelay;
 
 //Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC,TFT_MOSI, TFT_SCK, TFT_RESET, TFT_MISO);
-Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC);
+Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RESET);
 
 //XPT2046_Touchscreen ts(TOUCH_CS);
 XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
@@ -65,17 +82,18 @@ XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
 // LED pixel buffer
 LED_Data ledData[MAX_LED_COUNT];
 
+// Playback frame index
+unsigned int currentFrame = 0;
 
 // Test pattern to show on the LEDs, when an image cannot be loaded from the microSD card
-void colorLoop() {  
-  static float i = 0;
+void colorLoop() {
   static float j = 0;
   static float f = 0;
   static float k = 0;
 
   const float brightness = .4;
   
-  for (size_t i = 0; i < ledCount; i++) {
+  for (unsigned int i = 0; i < ledCount; i++) {
     ledData[i].r = brightness*256.0*(1+sin(i/2.0 + j/4.0       ));
     ledData[i].g = brightness*256.0*(1+sin(i/1.0 + f/9.0  + 2.1));
     ledData[i].b = brightness*256.0*(1+sin(i/3.0 + k/14.0 + 4.2));
@@ -88,12 +106,10 @@ void colorLoop() {
 
 // Read one row of pixel data from the image, and store it in the LED framebuffer.
 void imageLoop() {
-  static int currentFrame = 0;
-
-  for (size_t led = 0; led < ledCount; led++) {
+  for (unsigned int led = 0; led < ledCount; led++) {
     if(led < imageHeight) {
     
-      const unsigned int pos = led*imageWidth*3 + currentFrame*3;
+      const unsigned int pos = led*3 + currentFrame*imageHeight*3;
       ledData[led].r = imageData[pos + 0];
       ledData[led].g = imageData[pos + 1];
       ledData[led].b = imageData[pos + 2];
@@ -111,27 +127,27 @@ void imageLoop() {
     currentFrame = 0;
 }
 
-void drawButton(char *label, int x, int y) {
+void drawButton(const Button &button) {
   tft.setTextSize(2);
-  tft.setCursor(x+5, y+10);
-  tft.print(label);
+  tft.setCursor(button.x+5, button.y+10);
+  tft.print(button.text);
   
   const int buttonWidth = 100;
   const int buttonHeight = 30;
-  tft.drawRect(x,y,buttonWidth,buttonHeight, ILI9341_WHITE);
+  tft.drawRect(button.x,button.y,buttonWidth,buttonHeight, ILI9341_WHITE);
 }
 
-bool touchesButton(int x, int y, int touchX, int touchY) {
+bool touchesButton(const Button &button, int touchX, int touchY) {
   const int buttonWidth = 100;
   const int buttonHeight = 30;
-  return ((touchX >= x)
-          && (touchX <= x + buttonWidth)
-          && (touchY >= y)
-          && (touchY <= y + buttonHeight));
+  return ((touchX >= button.x)
+          && (touchX <= button.x + buttonWidth)
+          && (touchY >= button.y)
+          && (touchY <= button.y + buttonHeight));
 }
 
 void drawStats() {
-  tft.fillRect(0,0,119,119, ILI9341_BLACK);
+  tft.fillRect(0,0,119,90, ILI9341_BLACK);
   tft.setCursor(0, 0);
   tft.setTextColor(ILI9341_WHITE);
   tft.setTextSize(1);
@@ -146,6 +162,9 @@ void drawStats() {
     tft.println("MBI6020");
   else if(protocol == PROTOCOL_APA102)
     tft.println("APA102");
+  tft.print("SPI Clock:");
+  tft.print((int)spiClockFrequency/1000000);
+  tft.println("MHz");
   tft.print("Speed:");
   tft.print((int)fps);
   tft.println("fps");
@@ -157,48 +176,30 @@ void drawStats() {
   tft.println(imageWidth);
   tft.print("Height:");
   tft.println(imageHeight);
-
-
-  // Also write it to serial, for debugging
-  Serial.println("");
-  Serial.print("LEDs:");
-  Serial.println(ledCount);
-  Serial.print("Protocol:");
-  if(protocol == PROTOCOL_MBI6020)
-    Serial.println("MBI6020");
-  else if(protocol == PROTOCOL_APA102)
-    Serial.println("APA102");
-  Serial.print("Speed:");
-  Serial.print((int)fps);
-  Serial.println("fps");
-  Serial.print("Image:");
-  Serial.println(fileName);
-  Serial.print("Width:");
-  Serial.println(imageWidth);
-  Serial.print("Height:");
-  Serial.println(imageHeight);
 }
 
 void drawScreen() {
   tft.fillScreen(ILI9341_BLACK);
 
   // Draw some buttons
-  drawButton("Speed +", 10,120);
-  drawButton("Speed -", 10,170);
-  drawButton("APA102", 10,220);
-  drawButton("MBI6020", 10,270);
+  drawButton(speedPlus);
+  drawButton(speedMinus);
+  drawButton(apa102);
+  drawButton(mbi6020);
+  drawButton(clockMinus);
+  drawButton(clockPlus);
 
   // Draw the image  
   if(mode == MODE_IMAGE) {    
     uint16_t xOffset = 121;
     uint16_t yOffset = 1;
     
-    for(int x = 0; x < imageWidth; x++) {
-      for(int y = 0; y < imageHeight; y++) {
+    for(unsigned int x = 0; x < imageWidth; x++) {
+      for(unsigned int y = 0; y < imageHeight; y++) {
         const uint16_t color = tft.color565(
-          imageData[y*imageWidth*3 + x*3 + 0],
-          imageData[y*imageWidth*3 + x*3 + 1],
-          imageData[y*imageWidth*3 + x*3 + 2]
+          imageData[x*imageHeight*3 + y*3 + 0],
+          imageData[x*imageHeight*3 + y*3 + 1],
+          imageData[x*imageHeight*3 + y*3 + 2]
           );
         tft.drawPixel(x + xOffset, y + yOffset, color);
       }
@@ -222,18 +223,15 @@ void setup() {
 
   Serial.println("Starting TFT");
   tft.begin();
-  // It seems that the display doesn't fully turn on if not reset twice- not sure why.
-  delay(100);
-  tft.begin();
   
   Serial.println("Starting TS");
   ts.begin();
 
   Serial.println("Starting LED output");
   if(protocol == PROTOCOL_MBI6020)
-    mbi6020_begin();
+    mbi6020_begin(spiClockFrequency);
   else if(protocol == PROTOCOL_APA102)
-    apa102_begin();
+    apa102_begin(spiClockFrequency);
 
   Serial.println("Starting SD");
   if (!SD.begin(BUILTIN_SDCARD)) {
@@ -259,14 +257,22 @@ void setup() {
 
   frameDelay = 1000000/fps;
 
+  pinMode(FRAME_TIMING, OUTPUT);
+  digitalWriteFast(FRAME_TIMING, LOW);
+
   // Draw some stats
   drawScreen();
 }
 
+bool lastTouchState = false;
+bool drewUnderflowNotice = false;
+
 void loop() {
   elapsedMicros loopTime;
 
-  if(ts.touched()) {
+  bool currentTouchState = ts.touched();
+
+  if((currentTouchState == true) && (lastTouchState == false)) {
     TS_Point p = ts.getPoint();
 
     // Determined experimentally
@@ -277,7 +283,7 @@ void loop() {
     Serial.print(",");
     Serial.println(p.y);
 
-    if(touchesButton(10,120,mappedX,mappedY)) {
+    if(touchesButton(speedPlus,mappedX,mappedY)) {
       // Speed +
       if(fps >= 100)
         fps += 100;
@@ -287,9 +293,11 @@ void loop() {
         fps += 1;
 
       frameDelay = 1000000/fps;
+      
       drawStats();
+      drewUnderflowNotice = false;
     }
-    else if(touchesButton(10,170,mappedX,mappedY)) {
+    else if(touchesButton(speedMinus,mappedX,mappedY)) {
       // Speed -
       if(fps > 100)
         fps -= 100;
@@ -299,38 +307,79 @@ void loop() {
         fps -= 1;
 
       frameDelay = 1000000/fps;
+      
       drawStats();
+      drewUnderflowNotice = false;
     }
-    else if(touchesButton(10,220,mappedX,mappedY)) {
+    else if(touchesButton(apa102,mappedX,mappedY)) {
       // APA102
       protocol = PROTOCOL_APA102;
-      apa102_begin();
+      apa102_begin(spiClockFrequency);
+      
       drawStats();
+      drewUnderflowNotice = false;
     }
-    else if(touchesButton(10,270,mappedX,mappedY)) {
+    else if(touchesButton(mbi6020,mappedX,mappedY)) {
       // MBI6020
       protocol = PROTOCOL_MBI6020;
-      mbi6020_begin();
+      mbi6020_begin(spiClockFrequency);
+      
       drawStats();
+      drewUnderflowNotice = false;
     }
+    else if(touchesButton(clockPlus,mappedX,mappedY)) {
+      // Clock speed +
+      if (spiClockFrequency < 39000000)
+        spiClockFrequency += 1000000;
 
-    // Return here to avoid tripping the loop time indicator
-    return;
+      drawStats();
+      drewUnderflowNotice = false;
+    }
+    else if(touchesButton(clockMinus,mappedX,mappedY)) {
+      // Clock speed -
+      if (spiClockFrequency > 1000000)
+        spiClockFrequency -= 1000000;
+
+      drawStats();
+      drewUnderflowNotice = false;
+    }
+  }
+  lastTouchState = currentTouchState;
+
+  if(mode == MODE_TESTPATTERN) {
+    colorLoop();
+    
+//    if(protocol == PROTOCOL_MBI6020)
+//      send16bitGrayscaleData(ledData, ledCount, spiClockFrequency);
+//    else if(protocol == PROTOCOL_APA102)
+//      apa102_SendData(ledData, ledCount, spiClockFrequency);
+  }
+  else {
+    const unsigned char *frameData = imageData + currentFrame*imageHeight*3;
+    
+  digitalWriteFast(FRAME_TIMING, HIGH);
+    if(protocol == PROTOCOL_MBI6020)
+      send16bitGrayscaleData(frameData, ledCount, spiClockFrequency);
+    else if(protocol == PROTOCOL_APA102)
+      apa102_SendData(frameData, ledCount, spiClockFrequency);
+  digitalWriteFast(FRAME_TIMING, LOW);
+
+
+    currentFrame++;
+    if(currentFrame == imageWidth)
+      currentFrame = 0;
   }
 
-  if(mode == MODE_TESTPATTERN)
-    colorLoop();
-  else
-    imageLoop();
+  
 
-  if(protocol == PROTOCOL_MBI6020)
-    send16bitGrayscaleData(ledData, ledCount);
-  else if(protocol == PROTOCOL_APA102)
-    apa102_SendData(ledData, ledCount);
-
+// Note: this takes ~20us
   // If we exceeded loop time, draw a dot on the LCD to indicate this.
-  if(loopTime > frameDelay)
-    tft.drawPixel(90,45, ILI9341_RED);
+  if((loopTime > frameDelay) && (currentTouchState == false)) {
+    if(!drewUnderflowNotice) {
+      tft.drawPixel(90,52, ILI9341_RED);
+      drewUnderflowNotice = true;
+    }
+  }
   
   while(loopTime < frameDelay);
 }

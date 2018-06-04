@@ -4,12 +4,14 @@
 #ifndef APA102_H_
 #define APA102_H_
 
-#include "LED_DATA.h"
+//#include "LED_DATA.h"
 
 const int SPI_CLOCK_FREQ = 10000000;
 
-extern void apa102_begin();
+extern void apa102_begin(int spiClockFrequency);
 
-extern void apa102_SendData(const LED_Data * data, size_t count);
+//extern void apa102_SendData(const LED_Data * data, size_t count, int spiClockFrequency);
+
+extern void apa102_SendData(const unsigned char * data, size_t count, int spiClockFrequency);
 
 #endif
