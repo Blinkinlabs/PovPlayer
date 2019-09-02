@@ -17,7 +17,7 @@ A PCB file is included, however the project can be built using short jumper wire
 Install:
 
 *  [Arduino](https://www.arduino.cc/)
-*  [Teensyduino]()
+*  [Teensyduino](https://www.pjrc.com/teensy/teensyduino.html)
 *  Adafruit_ILI9341 library for Arduino- this might come with Teensyduino
 *  XPT2046_Touchscreen library for Arduino- this might come with Teensyduino
 
