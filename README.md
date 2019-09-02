@@ -21,6 +21,8 @@ Install:
 *  Adafruit_ILI9341 library for Arduino- this might come with Teensyduino
 *  XPT2046_Touchscreen library for Arduino- this might come with Teensyduino
 
+Download or clone this respoitory, then open the [project sketch sketch](https://github.com/Blinkinlabs/PovPlayer/tree/master/SPI_POV) in Arduino and upload it to the Teensy 3.6
+
 # Usage
 
 See the [Usage manual](https://github.com/Blinkinlabs/PovPlayer/raw/master/releases/2018-06-05%20POV%20Player%20Manual%20RevA.pdf)
