@@ -4,8 +4,6 @@
 #ifndef MBI6020_H_
 #define MBI6020_H_
 
-//#include "LED_DATA.h"
-
 
 extern void mbi6020_begin(size_t count, int spiClockFrequency);
 
@@ -13,6 +11,7 @@ extern void send16bitConfigurationData(size_t count, int spiClockFrequency);
 
 extern void send8bitDotCorrectionDataHigh(size_t count, int spiClockFrequency);
 
+// Send data. Note that the input data is 8-bit, though the output will be 16 bit.
 extern void send16bitGrayscaleData(const unsigned char * data, size_t count, int spiClockFrequency);
 
 #endif

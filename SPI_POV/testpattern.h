@@ -1,6 +1,7 @@
 #define TESTPATTERN_WIDTH 150
 #define TESTPATTERN_HEIGHT 300
-#define TESTPATTERN_FPS 30
+//#define TESTPATTERN_FPS 30
+#define TESTPATTERN_FPS 1000
 
 const uint8_t testpatternData[] = {
 // Frame: 0

@@ -4,6 +4,7 @@
 #include <XPT2046_Touchscreen.h>
 #include "MBI6020.h"
 #include "APA102.h"
+#include "ICND2110.h"
 #include "LED_DATA.h"
 
 #include "testpattern.h"
@@ -15,8 +16,9 @@
 //
 // Default configuration:
 
-#define SPI_CLOCK_FREQUENCY_APA102 16000000
-#define SPI_CLOCK_FREQUENCY_MBI6020 10000000
+#define SPI_CLOCK_FREQUENCY_APA102    16000000
+#define SPI_CLOCK_FREQUENCY_MBI6020   10000000
+#define SPI_CLOCK_FREQUENCY_ICND2110  1000000
 
 const unsigned int MAX_LED_COUNT = 500;
 unsigned int ledCount = 240;
@@ -52,7 +54,8 @@ const char fileName[] = "POV.BMP";
 
 #define PROTOCOL_MBI6020 0
 #define PROTOCOL_APA102 1
-int protocol = PROTOCOL_MBI6020;
+#define PROTOCOL_ICND2110 2
+int protocol = PROTOCOL_ICND2110;
 
 struct Button {
   String text;
@@ -107,6 +110,8 @@ void colorLoop() {
 
 // Read one row of pixel data from the image, and store it in the LED framebuffer.
 void imageLoop() {
+  static int fraction = 0;
+  
   for (unsigned int led = 0; led < ledCount; led++) {
     if(led < imageHeight) {
     
@@ -122,8 +127,13 @@ void imageLoop() {
     }
   }
 
-  currentFrame++;
-  
+
+  fraction++;
+  if(fraction > 100) {
+    fraction = 0;
+    currentFrame++;
+  }
+
   if(currentFrame == imageWidth)
     currentFrame = 0;
 }
@@ -163,6 +173,8 @@ void drawStats() {
     tft.println("MBI6020");
   else if(protocol == PROTOCOL_APA102)
     tft.println("APA102");
+  else if(protocol == PROTOCOL_ICND2110)
+    tft.println("ICND2110");
   tft.print("SPI Clock:");
   tft.print((int)spiClockFrequency/1000000);
   tft.println("MHz");
@@ -266,6 +278,10 @@ void setup() {
     spiClockFrequency = SPI_CLOCK_FREQUENCY_APA102;
     apa102_begin(ledCount, spiClockFrequency);
   }
+  else if(protocol == PROTOCOL_ICND2110) {
+    spiClockFrequency = SPI_CLOCK_FREQUENCY_ICND2110;
+    icnd2110_begin(ledCount, spiClockFrequency);
+  }
 
   frameDelay = 1000000/fps;
 
@@ -275,6 +291,8 @@ void setup() {
 
 bool lastTouchState = false;
 bool drewUnderflowNotice = false;
+
+int fraction = 0;
 
 void loop() {
   elapsedMicros loopTime;
@@ -366,14 +384,19 @@ void loop() {
     send16bitGrayscaleData(frameData, ledCount, spiClockFrequency);
   else if(protocol == PROTOCOL_APA102)
     apa102_SendData(frameData, ledCount, spiClockFrequency);
+  else if(protocol == PROTOCOL_ICND2110)
+    icnd2110_SendData(frameData, ledCount, spiClockFrequency);
     
   digitalWriteFast(FRAME_TIMING, LOW);
 
-  currentFrame++;
-  if(currentFrame == imageWidth)
-    currentFrame = 0;
 
-  
+  fraction++;
+  if(fraction > 1) {
+    fraction = 0;
+    currentFrame++;
+    if(currentFrame == imageWidth)
+      currentFrame = 0;
+  }
 
 // Note: this takes ~20us
   // If we exceeded loop time, draw a dot on the LCD to indicate this.
