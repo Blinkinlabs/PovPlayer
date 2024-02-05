@@ -13,6 +13,6 @@ extern void send16bitConfigurationData(size_t count, int spiClockFrequency);
 
 extern void send8bitDotCorrectionDataHigh(size_t count, int spiClockFrequency);
 
-extern void send16bitGrayscaleData(const unsigned char * data, size_t count, int spiClockFrequency);
+extern void send16bitGrayscaleData(const uint8_t * data, size_t count, int spiClockFrequency);
 
 #endif

@@ -2,8 +2,11 @@
 #include <SD.h>
 #include <Adafruit_ILI9341.h>
 #include <XPT2046_Touchscreen.h>
+
 #include "MBI6020.h"
+#include "MBI6120.h"
 #include "APA102.h"
+
 #include "LED_DATA.h"
 
 #include "testpattern.h"
@@ -15,12 +18,12 @@
 //
 // Default configuration:
 
-#define SPI_CLOCK_FREQUENCY_APA102 16000000
+#define SPI_CLOCK_FREQUENCY_APA102 19000000
 #define SPI_CLOCK_FREQUENCY_MBI6020 10000000
 
 const unsigned int MAX_LED_COUNT = 500;
 unsigned int ledCount = 240;
-int fps = 1100;
+int fps = 2100;
 int spiClockFrequency;
 const char fileName[] = "POV.BMP";
 
@@ -50,9 +53,11 @@ const char fileName[] = "POV.BMP";
 #define LOADBMP_IMPLEMENTATION
 #include "readbmp.h"
 
-#define PROTOCOL_MBI6020 0
-#define PROTOCOL_APA102 1
-int protocol = PROTOCOL_MBI6020;
+#define PROTOCOL_APA102   0
+#define PROTOCOL_MBI6020  1
+#define PROTOCOL_MBI6120  2
+
+int protocol = PROTOCOL_MBI6120;
 
 struct Button {
   String text;
@@ -60,12 +65,15 @@ struct Button {
   int y;
 };
 
-Button speedPlus  = {"Speed +", 10, 100};
-Button speedMinus = {"Speed -", 10, 135};
-Button apa102     = {"APA102",  10, 170};
-Button mbi6020    = {"MBI6020", 10, 205};
-Button clockPlus  = {"Clock +", 10, 240};
-Button clockMinus = {"Clock -", 10, 275};
+Button button_speedPlus  = {"Speed +", 10, 100};
+Button button_speedMinus = {"Speed -", 10, 135};
+//Button button_apa102     = {"apa102",  10, 170};
+Button button_mbi6120    = {"mbi6120", 10, 170};
+Button button_mbi6020    = {"mbi6020", 10, 205};
+Button button_clockPlus  = {"Clock +", 10, 240};
+Button button_clockMinus = {"Clock -", 10, 275};
+
+MBI6120 mbi6120;
 
 // Decoded bitmap geometry
 unsigned char *imageData;
@@ -80,52 +88,31 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_RESET);
 //XPT2046_Touchscreen ts(TOUCH_CS);
 XPT2046_Touchscreen ts(TOUCH_CS, TOUCH_IRQ);
 
-// LED pixel buffer
-LED_Data ledData[MAX_LED_COUNT];
-
 // Playback frame index
 unsigned int currentFrame = 0;
 
+// LED pixel buffer
+LED_Data ledData[MAX_LED_COUNT];
+
+uint16_t generativeBuffer[MAX_LED_COUNT*3];
+
 // Test pattern to show on the LEDs, when an image cannot be loaded from the microSD card
-void colorLoop() {
+void colorLoop16() {
   static float j = 0;
   static float f = 0;
   static float k = 0;
 
-  const float brightness = .4;
+  const float brightness = 1;
   
   for (unsigned int i = 0; i < ledCount; i++) {
-    ledData[i].r = brightness*256.0*(1+sin(i/2.0 + j/4.0       ));
-    ledData[i].g = brightness*256.0*(1+sin(i/1.0 + f/9.0  + 2.1));
-    ledData[i].b = brightness*256.0*(1+sin(i/3.0 + k/14.0 + 4.2));
+    generativeBuffer[i*3+0] = brightness*65535*(1+sin(i/2.0 + j/4.0       ));
+    generativeBuffer[i*3+1] = brightness*65535*(1+sin(i/1.0 + f/9.0  + 2.1));
+    generativeBuffer[i*3+2] = brightness*65535*(1+sin(i/3.0 + k/14.0 + 4.2));
   }
   
-  j = j + .1;
-  f = f + .1;
-  k = k + .2;
-}
-
-// Read one row of pixel data from the image, and store it in the LED framebuffer.
-void imageLoop() {
-  for (unsigned int led = 0; led < ledCount; led++) {
-    if(led < imageHeight) {
-    
-      const unsigned int pos = led*3 + currentFrame*imageHeight*3;
-      ledData[led].r = imageData[pos + 0];
-      ledData[led].g = imageData[pos + 1];
-      ledData[led].b = imageData[pos + 2];
-    }
-    else {
-      ledData[led].r = 0;
-      ledData[led].g = 0;
-      ledData[led].b = 0;
-    }
-  }
-
-  currentFrame++;
-  
-  if(currentFrame == imageWidth)
-    currentFrame = 0;
+  j = j + .01;
+  f = f + .01;
+  k = k + .02;
 }
 
 void drawButton(const Button &button) {
@@ -158,18 +145,24 @@ void drawStats() {
   tft.println("");
   tft.print("LEDs:");
   tft.println(ledCount);
+  
   tft.print("Protocol:");
-  if(protocol == PROTOCOL_MBI6020)
-    tft.println("MBI6020");
-  else if(protocol == PROTOCOL_APA102)
+  if(protocol == PROTOCOL_APA102)
     tft.println("APA102");
+  else if(protocol == PROTOCOL_MBI6020)
+    tft.println("MBI6020");    
+  else if(protocol == PROTOCOL_MBI6120)
+    tft.println("MBI6120");
+  else
+    tft.println("?");
+        
   tft.print("SPI Clock:");
   tft.print((int)spiClockFrequency/1000000);
   tft.println("MHz");
+  
   tft.print("Speed:");
   tft.print((int)fps);
   tft.println("fps");
-
   tft.println("");
   tft.print("Image:");
   tft.println(fileName);
@@ -183,12 +176,13 @@ void drawScreen() {
   tft.fillScreen(ILI9341_BLACK);
 
   // Draw some buttons
-  drawButton(speedPlus);
-  drawButton(speedMinus);
-  drawButton(apa102);
-  drawButton(mbi6020);
-  drawButton(clockMinus);
-  drawButton(clockPlus);
+  drawButton(button_speedPlus);
+  drawButton(button_speedMinus);
+  //drawButton(button_apa102);
+  drawButton(button_mbi6120);
+  drawButton(button_mbi6020);
+  drawButton(button_clockMinus);
+  drawButton(button_clockPlus);
 
   // Draw the image
   uint16_t xOffset = 121;
@@ -258,13 +252,16 @@ void setup() {
 
 
   Serial.println("Starting LED output");
-  if(protocol == PROTOCOL_MBI6020) {
+  if(protocol == PROTOCOL_APA102) {
+    spiClockFrequency = SPI_CLOCK_FREQUENCY_APA102;
+    apa102_begin(ledCount, spiClockFrequency);
+  }
+  else if(protocol == PROTOCOL_MBI6020) {
     spiClockFrequency = SPI_CLOCK_FREQUENCY_MBI6020;
     mbi6020_begin(ledCount, spiClockFrequency);
   }
-  else if(protocol == PROTOCOL_APA102) {
-    spiClockFrequency = SPI_CLOCK_FREQUENCY_APA102;
-    apa102_begin(ledCount, spiClockFrequency);
+  else if(protocol == PROTOCOL_MBI6120) {
+    mbi6120.begin();
   }
 
   frameDelay = 1000000/fps;
@@ -292,7 +289,7 @@ void loop() {
     Serial.print(",");
     Serial.println(p.y);
 
-    if(touchesButton(speedPlus,mappedX,mappedY)) {
+    if(touchesButton(button_speedPlus,mappedX,mappedY)) {
       // Speed +
       if(fps >= 100)
         fps += 100;
@@ -306,7 +303,7 @@ void loop() {
       drawStats();
       drewUnderflowNotice = false;
     }
-    else if(touchesButton(speedMinus,mappedX,mappedY)) {
+    else if(touchesButton(button_speedMinus,mappedX,mappedY)) {
       // Speed -
       if(fps > 100)
         fps -= 100;
@@ -320,17 +317,15 @@ void loop() {
       drawStats();
       drewUnderflowNotice = false;
     }
-    else if(touchesButton(apa102,mappedX,mappedY)) {
-      // APA102
-      protocol = PROTOCOL_APA102;
-      spiClockFrequency = SPI_CLOCK_FREQUENCY_APA102;
-      apa102_begin(ledCount, spiClockFrequency);
-      
-      drawStats();
-      drewUnderflowNotice = false;
-    }
-    else if(touchesButton(mbi6020,mappedX,mappedY)) {
-      // MBI6020
+//    else if(touchesButton(button_apa102,mappedX,mappedY)) {
+//      protocol = PROTOCOL_APA102;
+//      spiClockFrequency = SPI_CLOCK_FREQUENCY_APA102;
+//      button_apa102_begin(ledCount, spiClockFrequency);
+//      
+//      drawStats();
+//      drewUnderflowNotice = false;
+//    }
+    else if(touchesButton(button_mbi6020,mappedX,mappedY)) {
       protocol = PROTOCOL_MBI6020;
       spiClockFrequency = SPI_CLOCK_FREQUENCY_MBI6020;
       mbi6020_begin(ledCount, spiClockFrequency);
@@ -338,7 +333,14 @@ void loop() {
       drawStats();
       drewUnderflowNotice = false;
     }
-    else if(touchesButton(clockPlus,mappedX,mappedY)) {
+    else if(touchesButton(button_mbi6120,mappedX,mappedY)) {
+      protocol = PROTOCOL_MBI6120;
+      mbi6120.begin();
+      
+      drawStats();
+      drewUnderflowNotice = false;
+    }
+    else if(touchesButton(button_clockPlus,mappedX,mappedY)) {
       // Clock speed +
       if (spiClockFrequency < 39000000)
         spiClockFrequency += 1000000;
@@ -346,7 +348,7 @@ void loop() {
       drawStats();
       drewUnderflowNotice = false;
     }
-    else if(touchesButton(clockMinus,mappedX,mappedY)) {
+    else if(touchesButton(button_clockMinus,mappedX,mappedY)) {
       // Clock speed -
       if (spiClockFrequency > 1000000)
         spiClockFrequency -= 1000000;
@@ -357,22 +359,29 @@ void loop() {
   }
   lastTouchState = currentTouchState;
 
+  const uint8_t *frameData = imageData + currentFrame*imageHeight*3;
 
-  const unsigned char *frameData = imageData + currentFrame*imageHeight*3;
-    
   digitalWriteFast(FRAME_TIMING, HIGH);
 
-  if(protocol == PROTOCOL_MBI6020)
-    send16bitGrayscaleData(frameData, ledCount, spiClockFrequency);
-  else if(protocol == PROTOCOL_APA102)
+  if(protocol == PROTOCOL_APA102)
     apa102_SendData(frameData, ledCount, spiClockFrequency);
+  else if(protocol == PROTOCOL_MBI6020)
+    send16bitGrayscaleData(frameData, ledCount, spiClockFrequency);
+  else if(protocol == PROTOCOL_MBI6120) {
+    //mbi6120.send(frameData, ledCount);
+      
+    // TODO: Discarding image playback for generative
+    ledCount = 5;
+    colorLoop16();
+    mbi6120.send(generativeBuffer, ledCount);
+  }
+
     
   digitalWriteFast(FRAME_TIMING, LOW);
 
   currentFrame++;
   if(currentFrame == imageWidth)
     currentFrame = 0;
-
   
 
 // Note: this takes ~20us

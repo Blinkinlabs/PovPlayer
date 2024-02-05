@@ -137,7 +137,7 @@ void send8bitDotCorrectionDataHigh(size_t count, int spiClockFrequency) {
   SPI1.endTransaction();
 }
 
-void send16bitGrayscaleData(const unsigned char * data, size_t count, int spiClockFrequency) {
+void send16bitGrayscaleData(const uint8_t * data, size_t count, int spiClockFrequency) {
   // Build the preamble
   const size_t countAdj = count - 1;
 

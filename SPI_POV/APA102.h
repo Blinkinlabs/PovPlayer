@@ -10,6 +10,6 @@ const int SPI_CLOCK_FREQ = 10000000;
 
 extern void apa102_begin(size_t count, int spiClockFrequency);
 
-extern void apa102_SendData(const unsigned char * data, size_t count, int spiClockFrequency);
+extern void apa102_SendData(const uint8_t * data, size_t count, int spiClockFrequency);
 
 #endif

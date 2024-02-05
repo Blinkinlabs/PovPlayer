@@ -8,14 +8,21 @@ void apa102_begin(size_t count, int spiClockFrequency) {
   SPI1.begin();
 }
 
-void apa102_SendData(const unsigned char * data, size_t count, int spiClockFrequency) {
+void apa102_SendData(const uint8_t * data, size_t count, int spiClockFrequency) {
+  uint8_t buff[4];
+  buff[0] = 0;
+  buff[1] = 0;
+  buff[2] = 0;
+  buff[3] = 0;
+  
   SPI1.beginTransaction(SPISettings(spiClockFrequency, MSBFIRST, SPI_MODE0));
 
   // Start frame: 32 bits of 0's
-  SPI1.transfer(0x00);
-  SPI1.transfer(0x00);
-  SPI1.transfer(0x00);
-  SPI1.transfer(0x00);
+  SPI1.transfer(buff, 4);
+//  SPI1.transfer(0x00);
+//  SPI1.transfer(0x00);
+//  SPI1.transfer(0x00);
+//  SPI1.transfer(0x00);
 
   // Data: 32-bits per LED
   for(size_t i = 0; i < count; i++) {
